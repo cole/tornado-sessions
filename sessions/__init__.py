@@ -44,6 +44,11 @@ class Session(object):
  
     @classmethod
     def load(cls, id):
+        """Load the given session id from redis. If there's nothing for the
+        id given, returns an empty session.
+        
+        returns Session object.
+        """
         session = Session(id=id)
         # hgetall returns bytes
         for key, val in cls.store.hgetall(session.id).items():
@@ -53,20 +58,28 @@ class Session(object):
              
     @property
     def id(self):
+        """Prefix the session id for storage."""
         return 'session:{}'.format(self._id) if self._id else None
 
     def clear(self):
+        """Delete the session and all data."""
         self._data = {}
         self.pipe = self.store.pipeline()
         self.store.delete(self.id)
  
     def touch(self, remote_ip=None):
+        """Update the session expiry and set the last access time
+        and IP (if provided).
+        """
         if remote_ip is not None:
             self['last_ip_address'] = remote_ip
         self['last_access_time'] = '{}'.format(datetime.datetime.now())
         self.pipe.expire(self.id, self.length)
                   
     def pop(self, key, default=None):
+        """Pop a value off of the session.
+        
+        Returns session data or fallback."""
         if key in self:
             val = self[key]
             self.pipe.hdel(self.id, key)
@@ -75,6 +88,7 @@ class Session(object):
             return default
  
     def save(self):
+        """Execute piped session commands."""
         self.pipe.execute()
         
     def get(self, key, default):
@@ -135,7 +149,8 @@ class SessionHandler(RequestHandler):
         self.clear_cookie('session')
             
 def session(method):
-    """Decorate methods with this to setup a session.
+    """Decorator for handler methods. Loads the session prior to method
+    execution and saves it after.
     """
     @wraps(method)
     def wrapper(self, *args, **kwargs):
