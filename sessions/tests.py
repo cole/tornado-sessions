@@ -1,8 +1,5 @@
 # -*- coding: UTF-8 -*-
-# tests/unit/session_tests.py
-# Rideshare
-#
-# Copyright 2013 Cole Maclean
+# Copyright 2014 Cole Maclean
 """Unit tests for session handling."""
 import os
 import sys

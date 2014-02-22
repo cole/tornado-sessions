@@ -1,8 +1,7 @@
 # -*- coding: UTF-8 -*-
-# sessions.py
-# Tornado sessions, stored in Redis
-#
-# Copyright 2013 Cole Maclean
+# Copyright 2014 Cole Maclean
+"""Tornado sessions, stored in Redis.
+"""
 import datetime
 import uuid
 from functools import wraps
