@@ -15,12 +15,11 @@ accessed as a dict, which is saved on handler finish.
  - Tornado
  - Redis
  
- 
 ## Usage
 
 To use sessions, you must have a cookie secret set (for secure cookies).
 
-There are two was to handle session access.
+There are two was to give handlers session access.
 
 First using the `@session` wrapper on handler methods:
 
@@ -37,4 +36,26 @@ Alternatively, handlers inheriting from `SessionHandler`:
     
         def get(self):
             self.session # this is loaded now
+
+The `self.session` object can be treated as a dict that is automatically saved
+to Redis when the handler method finishes. For example:
+
+
+    class MainHandler(SessionHandler):
+    
+        def get(self):
+            self.session['foo'] = 'bar'
+            self.session['an_int'] = 7
+            self.session['arbitrary_object'] = datetime.datetime.now()
+    
+    class LaterHandler(SessionHandler):
+    
+        def get(self):
+            foo = self.session['foo'] # bar
+            last_access = self.session['arbitrary_object'] # datetime object
+            self.session['not_set'] # raises KeyError
+            # in general, either use get or try/except
+            self.session.get('not_set') # None
+            # pop also works
+            self.session.pop('an_int')
 
