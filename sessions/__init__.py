@@ -19,10 +19,18 @@ import redis
 from tornado.web import RequestHandler
 from tornado.options import options, define
 
-define("redis_host", default="localhost", help="Redis host")
-define("redis_port", default=6379, help="Redis port number")
-define("redis_session_db", default=0, help="Redis sessions _database")
-define("session_length", default=14, help="Session length in days")
+if not hasattr(options, 'redis_host'):
+    define("redis_host", default="localhost", help="Redis host")
+if not hasattr(options, 'redis_port'):
+    define("redis_port", default=6379, help="Redis port number")
+if not hasattr(options, 'redis_session_db'):
+    try:
+        default_db = options.redis_db
+    except AttributeError:
+        default_db = 0
+    define("redis_session_db", default=default_db, help="Redis sessions database")
+if not hasattr(options, 'session_length'):
+    define("session_length", default=14, help="Session length in days")
 
 class Session(MutableMapping):
     """Simple session, stored in redis.
