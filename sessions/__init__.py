@@ -32,6 +32,7 @@ if not hasattr(options, 'redis_session_db'):
 if not hasattr(options, 'session_length'):
     define("session_length", default=14, help="Session length in days")
 
+
 class Session(MutableMapping):
     """Simple session, stored in redis.
     sess_id = uuid.uuid4().hex
@@ -44,7 +45,7 @@ class Session(MutableMapping):
     > 'bar'
     """
     store = redis.StrictRedis(host=options.redis_host,
-        port=options.redis_port, db=options.redis_session_db)
+                port=options.redis_port, db=options.redis_session_db)
     length = options.session_length * 86400 # in seconds
  
     def __init__(self, id, *args, **kwargs):
@@ -68,11 +69,19 @@ class Session(MutableMapping):
             
         return session
     
-    def _load_data(self):
-        # hgetall returns bytes
-        for key, val in self.store.hgetall(self.id).items():
-            self._data[key.decode('utf-8')] = pickle.loads(val)
-        self._loaded = True
+    def _load_data(self, key=None):
+        if self._loaded:
+            return
+        if key is None:
+            # load everything
+            for key, val in self.store.hgetall(self.id).items():
+                # hgetall returns bytes
+                key = key.decode('utf-8')
+                self._data[key] = pickle.loads(val)
+            self._loaded = True
+        elif key in self:
+            val = self.store.hget(self.id, key)
+            self._data[key] = pickle.loads(val)
                 
     @property
     def id(self):
@@ -101,9 +110,11 @@ class Session(MutableMapping):
         self._dirty = False
  
     def __getitem__(self, key):
-        if not (self._loaded or key in self._data) and self.store.hexists(self.id, key):
-            self._data[key] = pickle.loads(self.store.hget(self.id, key))
-        return self._data[key]
+        try:
+            return self._data[key]
+        except KeyError as err:
+            self._load_data(key=key)
+            return self._data[key]
  
     def __setitem__(self, key, value):
         self._dirty = True
@@ -113,38 +124,41 @@ class Session(MutableMapping):
     def __delitem__(self, key):
         # We save immediately here to prevent
         # autoloading of the key on next access
-        if self._loaded or key in self._data:
+        if key in self:
             self._pipe.hdel(self.id, key)
             self.save(force=True)
-            del self._data[key]
-        elif self.store.hexists(self.id, key):
-            self._pipe.hdel(self.id, key)
-            self.save(force=True)
+            if key in self._data:
+                del self._data[key]
+        else:
+            raise KeyError(key)
         
     def __iter__(self):
-        if not self._loaded:
-            self._load_data()
+        self._load_data()
         return iter(self._data)
         
     def __len__(self):
-        if not self._loaded:
-            self._load_data()
+        self._load_data()
         return len(self._data)
         
     def __repr__(self):
-        if not self._loaded:
-            self._load_data()
+        self._load_data()
         return "<{0}, {1}>".format(self.id, repr(self._data))
+        
+    def __contains__(self, key):
+        if key in self._data:
+            return True
+        elif not self._loaded:
+            return self.store.hexists(self.id, key)
+        else:
+            return False
     
     def to_json(self):
-        if not self._loaded:
-            self._load_data()
+        self._load_data()
         return json.dumps(self, default=lambda o: o._data,
             sort_keys=True, indent=4)
             
     def copy(self):
-        if not self._loaded:
-            self._load_data()
+        self._load_data()
         return Session(self._id, **self._data.copy())
 
 def setup_session(handler):
@@ -152,7 +166,8 @@ def setup_session(handler):
     session_id = handler.get_secure_cookie('session')
 
     if session_id is not None:
-        handler.session = Session.load(session_id.decode('utf-8'))
+        session_id = session_id.decode('utf-8')
+        handler.session = Session.load(session_id)
     else:
         new_id = uuid.uuid4().hex
         handler.session = Session(new_id)
