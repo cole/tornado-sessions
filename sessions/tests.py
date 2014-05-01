@@ -1,9 +1,6 @@
 # -*- coding: UTF-8 -*-
 # Copyright 2014 Cole Maclean
 """Unit tests for session handling."""
-import os
-import sys
-import datetime
 import unittest
 try:
     # python3
@@ -203,54 +200,52 @@ class SessionWrapperHandler(tornado.web.RequestHandler):
         self.finish()
         
 class SessionHandlerTests(tornado.testing.AsyncHTTPTestCase):
+
     def get_app(self):
         settings = {
             'cookie_secret': "sdafdsklfdsfdsafkdsafjdskfjsdflksd",
             'log_function': lambda s: s, # hide web server logs
         }
         return tornado.web.Application([
-            (r"/session_handler", SessionTestHandler),
-            (r"/session_wrapper", SessionWrapperHandler),
+            (r"/session_test", SessionTestHandler),
         ], **settings)
 
-    @tornado.testing.gen_test
-    def test_session_handler(self):
-        data = {
+    def setUp(self):
+        self.test_data = {
             'foo': 'bar',
             'testing': 123
         }
-        post = yield self.http_client.fetch(self.get_url('/session_handler'),
-            method="POST", body=urlencode(data))
-        cookie = post.headers['Set-Cookie']
-        raw_resp = yield self.http_client.fetch(self.get_url('/session_handler'),
-            headers={ 'Cookie': cookie })
-        json = json_decode(raw_resp.body)
-        self.assertEqual(data['foo'], json['foo'])
-        self.assertEqual(data['testing'], int(json['testing']))
+        super(SessionHandlerTests, self).setUp()
+        post = self.fetch('/session_test', method="POST", body=urlencode(self.test_data))
+        self.cookie = post.headers['Set-Cookie']
     
-        cleanup = yield self.http_client.fetch(self.get_url('/session_handler'),
-            method="DELETE", headers={ 'Cookie': cookie })
-
+    def tearDown(self):
+        self.fetch('/session_test', method="DELETE", headers={ 'Cookie': self.cookie })
+        super(SessionHandlerTests, self).tearDown()
+            
+    def test_session_handler(self):
+        raw_resp = self.fetch('/session_test', headers={ 'Cookie': self.cookie })
+        json = json_decode(raw_resp.body)
+        self.assertEqual(self.test_data['foo'], json['foo'])
+        self.assertEqual(self.test_data['testing'], int(json['testing']))
+    
 class SessionWrapperTests(SessionHandlerTests):
     
-    @tornado.testing.gen_test
-    def test_session_wrapper(self):
-        data = {
-            'foo': 'bar',
-            'testing': 123
+    def get_app(self):
+        settings = {
+            'cookie_secret': "sdafdsklfdsfdsafkdsafjdskfjsdflksd",
+            'log_function': lambda s: s, # hide web server logs
         }
-        post = yield self.http_client.fetch(self.get_url('/session_wrapper'),
-            method="POST", body=urlencode(data))
-        cookie = post.headers['Set-Cookie']
-        raw_resp = yield self.http_client.fetch(self.get_url('/session_wrapper'),
-            headers={ 'Cookie': cookie })
-        json = json_decode(raw_resp.body)
-        self.assertEqual(data['foo'], json['foo'])
-        self.assertEqual(data['testing'], int(json['testing']))
+        return tornado.web.Application([
+            (r"/session_test", SessionWrapperHandler),
+        ], **settings)
     
-        cleanup = yield self.http_client.fetch(self.get_url('/session_wrapper'),
-            method="DELETE", headers={ 'Cookie': cookie })
-            
+    def test_session_wrapper(self):
+        raw_resp = self.fetch('/session_test', headers={ 'Cookie': self.cookie })
+        json = json_decode(raw_resp.body)
+        self.assertEqual(self.test_data['foo'], json['foo'])
+        self.assertEqual(self.test_data['testing'], int(json['testing']))
+
 def suite():
     suite = unittest.TestLoader().loadTestsFromTestCase(SessionTests)
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(DictApiTests))

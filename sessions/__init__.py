@@ -112,7 +112,7 @@ class Session(MutableMapping):
     def __getitem__(self, key):
         try:
             return self._data[key]
-        except KeyError as err:
+        except KeyError:
             self._load_data(key=key)
             return self._data[key]
  
